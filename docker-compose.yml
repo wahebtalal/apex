@@ -1,0 +1,130 @@
+version: '3.8'
+
+# =================================================================
+# Oracle APEX + ORDS Docker Setup
+# Optimized for Coolify with Persistent Storage (Bind Mounts)
+# =================================================================
+
+services:
+  # =================================================================
+  # Oracle Database XE with APEX
+  # =================================================================
+  oracle-db:
+    image: container-registry.oracle.com/database/express:21.3.0-xe
+    container_name: apex-db
+    hostname: oracle-db
+    restart: unless-stopped
+    shm_size: 1g
+    
+    environment:
+      - ORACLE_PWD=${ORACLE_PWD:-SecurePassword123!}
+      - ORACLE_CHARACTERSET=AL32UTF8
+    
+    ports:
+      - "${DB_PORT:-1521}:1521"
+      - "${DB_EM_PORT:-5500}:5500"
+    
+    volumes:
+      # Bind mount for persistent Oracle data (accessible from server)
+      - ./data/oracle:/opt/oracle/oradata
+      # Startup and setup scripts
+      - ./scripts/startup:/opt/oracle/scripts/startup
+      - ./scripts/setup:/opt/oracle/scripts/setup
+    
+    networks:
+      - apex-network
+    
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'SELECT 1 FROM DUAL;' | sqlplus -L sys/${ORACLE_PWD:-SecurePassword123!}@//localhost:1521/XE as sysdba | grep -q '1' || exit 1"]
+      interval: 60s
+      timeout: 30s
+      retries: 10
+      start_period: 600s
+    
+    labels:
+      - "coolify.managed=true"
+
+  # =================================================================
+  # ORDS (Oracle REST Data Services) with APEX
+  # =================================================================
+  ords:
+    image: container-registry.oracle.com/database/ords:latest
+    container_name: apex-ords
+    hostname: ords
+    restart: unless-stopped
+    
+    depends_on:
+      oracle-db:
+        condition: service_healthy
+    
+    environment:
+      # Database Connection
+      - ORACLE_HOST=oracle-db
+      - ORACLE_PORT=1521
+      - ORACLE_SERVICE=XEPDB1
+      - ORACLE_PWD=${ORACLE_PWD:-SecurePassword123!}
+      
+      # ORDS Configuration
+      - ORDS_PORT=8181
+      
+      # APEX Users
+      - APEX_PUBLIC_USER_NAME=APEX_PUBLIC_USER
+      - APEX_PUBLIC_USER_PASSWORD=${APEX_PUBLIC_USER:-ApexPublic123!}
+      - APEX_LISTENER_PASSWORD=${APEX_LISTENER:-ApexListener123!}
+      - APEX_REST_PUBLIC_USER_PASSWORD=${APEX_REST:-ApexRest123!}
+    
+    ports:
+      - "${ORDS_PORT:-8181}:8181"
+    
+    volumes:
+      # Bind mounts for persistent ORDS data (accessible from server)
+      - ./data/ords/config:/etc/ords/config
+      - ./data/ords/secrets:/etc/ords/secrets
+      - ./data/apex/images:/opt/oracle/apex/images
+    
+    networks:
+      - apex-network
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-s", "http://localhost:8181/ords/"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 180s
+    
+    labels:
+      # Coolify Labels
+      - "coolify.managed=true"
+      
+      # Traefik Labels (Coolify uses Traefik for reverse proxy)
+      - "traefik.enable=true"
+      
+      # HTTP Router (Port 80)
+      - "traefik.http.routers.apex-http.rule=Host(`${APEX_DOMAIN:-apex.localhost}`)"
+      - "traefik.http.routers.apex-http.entrypoints=http"
+      - "traefik.http.routers.apex-http.service=apex-service"
+      
+      # HTTPS Router (Port 443)
+      - "traefik.http.routers.apex-https.rule=Host(`${APEX_DOMAIN:-apex.localhost}`)"
+      - "traefik.http.routers.apex-https.entrypoints=https"
+      - "traefik.http.routers.apex-https.tls=true"
+      - "traefik.http.routers.apex-https.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.apex-https.service=apex-service"
+      
+      # Optional: Redirect HTTP to HTTPS (uncomment if needed)
+      # - "traefik.http.routers.apex-http.middlewares=redirect-to-https"
+      # - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      # - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+      
+      # Service Configuration
+      - "traefik.http.services.apex-service.loadbalancer.server.port=8181"
+      - "traefik.http.services.apex-service.loadbalancer.healthcheck.path=/ords/"
+      - "traefik.http.services.apex-service.loadbalancer.healthcheck.interval=30s"
+
+# =================================================================
+# Network
+# =================================================================
+networks:
+  apex-network:
+    driver: bridge
+    name: apex-network

@@ -1,0 +1,25 @@
+# Oracle Docker files
+.env
+*.log
+
+# Persistent data (DO NOT commit to git)
+data/
+
+# Backups
+backups/
+
+# Volumes (managed by Docker)
+volumes/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Backup files
+*.bak
+*.backup
