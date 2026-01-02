@@ -1,0 +1,23 @@
+FROM container-registry.oracle.com/database/ords:latest
+
+USER root
+
+# Install necessary utilities
+RUN microdnf install -y curl unzip && \
+    microdnf clean all
+
+# Create directories
+RUN mkdir -p /etc/ords /ords/images && \
+    chown -R oracle:oracle /etc/ords /ords
+
+USER oracle
+
+# Copy configuration script
+COPY --chown=oracle:oracle scripts/ords-config.sh /opt/oracle/ords/ords-config.sh
+RUN chmod +x /opt/oracle/ords/ords-config.sh
+
+# Expose ORDS port
+EXPOSE 8181
+
+# Custom entrypoint
+ENTRYPOINT ["/opt/oracle/ords/ords-config.sh"]
