@@ -5,6 +5,10 @@ echo "=========================================="
 echo "ORDS Configuration Script"
 echo "=========================================="
 
+# Ensure required directories exist
+mkdir -p /etc/ords /ords/images
+echo "Created required directories"
+
 # Configuration directory
 ORDS_CONFIG="/etc/ords/config"
 CONN_STRING="${DB_HOSTNAME}:${DB_PORT}/${DB_SERVICE}"

@@ -6,10 +6,6 @@ USER root
 RUN microdnf install -y curl unzip && \
     microdnf clean all
 
-# Create directories
-RUN mkdir -p /etc/ords /ords/images && \
-    chown -R oracle:oracle /etc/ords /ords
-
 USER oracle
 
 # Copy configuration script
